@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>艺术的启示 - 姓名拼音自动填充</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pinyin-pro/3.13.2/index.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f4f7f6; }
+        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: inline-block; }
+        h2 { color: #333; }
+        input { margin: 20px 0; }
+        button { background-color: #4CAF50; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 5px; }
+        button:disabled { background-color: #ccc; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🎨 姓名拼音自动填充工具</h2>
+        <p>请上传 .xlsx 文件（B列中文名 -> C列拼音）</p>
+        <input type="file" id="upload" accept=".xlsx" /><br>
+        <button id="processBtn" disabled>开始处理并下载</button>
+    </div>
+
+    <script>
+        const { pinyin } = pinyinPro;
+        let workbookData = null;
+        let fileName = "";
+
+        // 核心逻辑：前两个字首字母大写，后续小写
+        function convertToPinyin(name) {
+            if (!name) return "";
+            // 将姓名拆分为单个汉字的拼音数组
+            const pinyinArray = pinyin(name, { type: 'array', toneType: 'none' });
+            
+            return pinyinArray.map((py, index) => {
+                if (index < 2) {
+                    // 前两个字首字母大写
+                    return py.charAt(0).toUpperCase() + py.slice(1).toLowerCase();
+                } else {
+                    // 后续字全小写
+                    return py.toLowerCase();
+                }
+            }).reduce((acc, curr, idx) => {
+                // 姓(第一个字)后面加空格，其余连写
+                return idx === 1 ? acc + " " + curr : acc + curr;
+            });
+        }
+
+        document.getElementById('upload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            fileName = file.name;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                workbookData = XLSX.read(data, { type: 'array' });
+                document.getElementById('processBtn').disabled = false;
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        document.getElementById('processBtn').addEventListener('click', function() {
+            const sheetName = workbookData.SheetNames[0];
+            const worksheet = workbookData.Sheets[sheetName];
+            
+            // 将表格转为 JSON 处理
+            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+            // 从第二行开始处理 (index 1)
+            for (let i = 1; i < rows.length; i++) {
+                let chineseName = rows[i][1]; // B列
+                if (chineseName && !String(chineseName).includes("必填")) {
+                    rows[i][2] = convertToPinyin(String(chineseName)); // 写入C列
+                }
+            }
+
+            // 写回 Excel
+            const newWS = XLSX.utils.aoa_to_sheet(rows);
+            const newWB = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(newWB, newWS, sheetName);
+            
+            // 导出下载
+            XLSX.writeFile(newWB, `【已填充】${fileName}`);
+        });
+    </script>
+</body>
+</html>

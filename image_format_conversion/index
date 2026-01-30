@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极简图片转换器</title>
+    <style>
+        body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f4f7f6; }
+        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; width: 400px; }
+        .drop-zone { border: 2px dashed #007bff; padding: 20px; border-radius: 8px; margin-bottom: 20px; cursor: pointer; transition: background 0.3s; }
+        .drop-zone:hover { background: #e7f3ff; }
+        select, button { padding: 10px; margin: 5px; border-radius: 5px; border: 1px solid #ddd; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        #preview { max-width: 100%; margin-top: 15px; border-radius: 4px; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>🖼️ 图片格式转换</h2>
+    <div class="drop-zone" id="dropZone">点击或拖拽图片到这里</div>
+    <input type="file" id="fileInput" accept="image/*" style="display: none;">
+    
+    <div>
+        <label>目标格式：</label>
+        <select id="formatSelect">
+            <option value="image/png">PNG</option>
+            <option value="image/jpeg">JPG</option>
+            <option value="image/x-icon">ICO (Icon)</option>
+            <option value="image/webp">WebP</option>
+        </select>
+    </div>
+    
+    <button id="convertBtn">转换并下载</button>
+    <canvas id="canvas" style="display: none;"></canvas>
+    <img id="preview" alt="预览">
+</div>
+
+<script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const convertBtn = document.getElementById('convertBtn');
+    const formatSelect = document.getElementById('formatSelect');
+    const canvas = document.getElementById('canvas');
+    const preview = document.getElementById('preview');
+
+    let sourceImg = new Image();
+
+    // 触发文件选择
+    dropZone.onclick = () => fileInput.click();
+
+    fileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                sourceImg.src = event.target.result;
+                sourceImg.onload = () => {
+                    preview.src = sourceImg.src;
+                    preview.style.display = 'inline-block';
+                    dropZone.innerText = `已加载: ${file.name}`;
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    convertBtn.onclick = () => {
+        if (!sourceImg.src) return alert('请先上传图片');
+
+    const targetFormat = formatSelect.value;
+    
+    if (targetFormat !== 'image/x-icon') {
+        canvas.width = sourceImg.width;
+        canvas.height = sourceImg.height;
+        canvas.getContext('2d').drawImage(sourceImg, 0, 0);
+        downloadFile(canvas.toDataURL(targetFormat), `converted.${targetFormat.split('/')[1]}`);
+        return;
+    }
+
+    // --- 改进版：支持高分辨率的 ICO 转换 ---
+    // 自动适配图片尺寸，最高支持 256x256 (ICO 标准上限)
+    const size = Math.min(Math.max(sourceImg.width, sourceImg.height), 256);
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    
+    // 居中绘制图片，防止变形
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(sourceImg, 0, 0, size, size);
+
+    canvas.toBlob((blob) => {
+        blob.arrayBuffer().then(buffer => {
+            const pngData = new Uint8Array(buffer);
+            const icoHeaderSize = 6;
+            const icoDirectorySize = 16;
+            const totalSize = icoHeaderSize + icoDirectorySize + pngData.length;
+            
+            const icoBuffer = new ArrayBuffer(totalSize);
+            const view = new DataView(icoBuffer);
+
+            // 1. ICO Header
+            view.setUint16(0, 0, true);
+            view.setUint16(2, 1, true);
+            view.setUint16(4, 1, true);
+
+            // 2. Image Directory
+            // 注意：ICO 标准规定 256px 需写入 0 而非 256
+            view.setUint8(6, size >= 256 ? 0 : size); 
+            view.setUint8(7, size >= 256 ? 0 : size);
+            view.setUint8(8, 0); 
+            view.setUint8(9, 0);
+            view.setUint16(10, 1, true);
+            view.setUint16(12, 32, true);
+            view.setUint32(14, pngData.length, true);
+            view.setUint32(18, icoHeaderSize + icoDirectorySize, true);
+
+            // 3. 写入数据
+            const finalImage = new Uint8Array(icoBuffer);
+            finalImage.set(pngData, icoHeaderSize + icoDirectorySize);
+
+            const finalBlob = new Blob([finalImage], { type: 'image/x-icon' });
+            downloadFile(URL.createObjectURL(finalBlob), 'app_icon.ico');
+            console.log(`转换完成，尺寸: ${size}x${size}, 大小: ${(totalSize/1024).toFixed(2)} KB`);
+        });
+    }, 'image/png');
+};
+
+function downloadFile(url, fileName) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+};
+</script>
+
+</body>
+</html>

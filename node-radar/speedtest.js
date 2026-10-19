@@ -44,7 +44,8 @@
     '<p class="micro">1 MB = 1000 KB，1 Byte = 8 bit。标准测试下载约 10 MB；开启上传另需约 2 MB。实际消耗包含少量协议开销。测速失败可能与节点分流或跨域限制有关，并不代表所有网站无法访问。</p>',
     '</section>'
   ].join('');
-  const anchor = document.querySelector('.ai-box');
+  const geminiPanel = document.querySelector('.ai-box');
+  const anchor = geminiPanel && geminiPanel.previousElementSibling;
   if (!anchor) return;
   anchor.insertAdjacentHTML('beforebegin', markup);
   const $ = find;
